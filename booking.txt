@@ -1,0 +1,21 @@
+booking_id,booking_date,booking_type,booking_status
+1,2023-05-15 10:30:00,Online,Confirmed
+2,2023-05-16 11:45:00,Counter,Confirmed
+3,2023-05-17 09:15:00,Online,RAC
+4,2023-05-18 14:20:00,Online,Waitlist
+5,2023-05-19 16:00:00,Counter,Confirmed
+6,2023-05-20 12:30:00,Online,Confirmed
+7,2023-05-21 08:45:00,Counter,Confirmed
+8,2023-05-22 15:15:00,Online,RAC
+9,2023-05-23 11:00:00,Counter,Waitlist
+10,2023-05-24 14:45:00,Online,Confirmed
+11,2023-05-25 10:20:00,Online,Confirmed
+12,2023-05-26 16:30:00,Counter,Confirmed
+13,2023-05-27 09:45:00,Online,RAC
+14,2023-05-28 13:20:00,Counter,Waitlist
+15,2023-05-29 17:00:00,Online,Confirmed
+16,2023-05-30 08:15:00,Counter,Confirmed
+17,2023-05-31 14:50:00,Online,Confirmed
+18,2023-06-01 11:25:00,Counter,RAC
+19,2023-06-02 15:40:00,Online,Waitlist
+20,2023-06-03 10:10:00,Counter,Confirmed

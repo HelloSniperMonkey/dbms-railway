@@ -1,0 +1,11 @@
+concession_id,concession_type,discount_percentage,description
+1,Senior Citizen (Male),40,For male passengers aged 60 and above
+2,Senior Citizen (Female),50,For female passengers aged 58 and above
+3,Student,25,For students with valid ID
+4,Disabled,50,For passengers with disability
+5,Armed Forces,30,For armed forces personnel
+6,War Widow,75,For war widows with valid proof
+7,Paramilitary Forces,30,For paramilitary forces personnel
+8,Physically Challenged,50,For physically challenged passengers
+9,Patients,50,For patients traveling for medical treatment
+10,Press Correspondents,50,For accredited press correspondents

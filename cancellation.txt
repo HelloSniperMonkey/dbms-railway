@@ -1,0 +1,7 @@
+cancellation_id,ticket_id,cancellation_date,refund_amount,refund_status
+1,1,2023-05-20 12:00:00,3360.00,Processed
+2,3,2023-05-21 14:30:00,1152.00,Pending
+3,6,2023-05-25 15:45:00,1800.00,Processed
+4,8,2023-05-28 10:20:00,768.00,Pending
+5,13,2023-06-02 09:15:00,1800.00,Processed
+6,18,2023-06-05 16:30:00,1040.00,Pending
