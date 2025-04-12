@@ -1,0 +1,8 @@
+class_id,class_name,base_fare_per_km
+1,Sleeper,1.00
+2,AC 3-tier,2.50
+3,AC 2-tier,3.50
+4,First Class,5.00
+5,Second Sitting,0.75
+6,AC Chair Car,2.00
+7,Executive Class,6.00

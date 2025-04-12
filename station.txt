@@ -1,0 +1,21 @@
+station_id,station_name,station_code,city,state
+1,Mumbai Central,MMCT,Mumbai,Maharashtra
+2,Delhi Junction,DLI,Delhi,Delhi
+3,Chennai Central,MAS,Chennai,Tamil Nadu
+4,Howrah Junction,HWH,Kolkata,West Bengal
+5,Bangalore City,SBC,Bangalore,Karnataka
+6,Ahmedabad Junction,ADI,Ahmedabad,Gujarat
+7,Pune Junction,PUNE,Pune,Maharashtra
+8,Jaipur Junction,JP,Jaipur,Rajasthan
+9,Lucknow Junction,LJN,Lucknow,Uttar Pradesh
+10,Hyderabad Deccan,HYB,Hyderabad,Telangana
+11,Secunderabad Junction,SC,Hyderabad,Telangana
+12,Patna Junction,PNBE,Patna,Bihar
+13,Guwahati,GHY,Guwahati,Assam
+14,Thiruvananthapuram Central,TVC,Thiruvananthapuram,Kerala
+15,Chhatrapati Shivaji Terminus,CSTM,Mumbai,Maharashtra
+16,Kanpur Central,CNB,Kanpur,Uttar Pradesh
+17,Allahabad Junction,ALD,Allahabad,Uttar Pradesh
+18,Varanasi Junction,BSB,Varanasi,Uttar Pradesh
+19,Bhopal Junction,BPL,Bhopal,Madhya Pradesh
+20,Indore Junction INDB,INDB,Indore,Madhya Pradesh

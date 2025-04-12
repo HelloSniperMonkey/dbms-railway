@@ -1,0 +1,21 @@
+passenger_id,name,age,gender,mobile,email,proof_type,proof_number
+1,Rahul Sharma,35,Male,9876543210,rahul@gmail.com,Aadhar,123456789012
+2,Priya Patel,28,Female,8765432109,priya@gmail.com,PAN,ABCDE1234F
+3,Amit Singh,65,Male,7654321098,amit@gmail.com,Aadhar,234567890123
+4,Neha Gupta,60,Female,6543210987,neha@gmail.com,Aadhar,345678901234
+5,Vijay Kumar,22,Male,9432109876,vijay@gmail.com,Student ID,STU2023001
+6,Ananya Desai,45,Female,8321098765,ananya@yahoo.com,Aadhar,456789012345
+7,Rajesh Khanna,70,Male,7210987654,rajesh@hotmail.com,PAN,BCDEF2345G
+8,Sunita Reddy,58,Female,6109876543,sunita@gmail.com,Aadhar,567890123456
+9,Arjun Mehta,19,Male,5998765432,arjun@outlook.com,Student ID,STU2023002
+10,Divya Iyer,62,Female,4887654321,divya@gmail.com,Aadhar,678901234567
+11,Karan Malhotra,40,Male,3776543210,karan@yahoo.com,Driving License,DL0420111234567
+12,Shweta Joshi,27,Female,2665432109,shweta@gmail.com,Aadhar,789012345678
+13,Vikram Bhat,55,Male,1554321098,vikram@hotmail.com,PAN,CDEFG3456H
+14,Pooja Shah,63,Female,0443210987,pooja@gmail.com,Aadhar,890123456789
+15,Rohit Verma,24,Male,9332109876,rohit@outlook.com,Student ID,STU2023003
+16,Anjali Kapoor,59,Female,8221098765,anjali@yahoo.com,Aadhar,901234567890
+17,Suresh Nair,68,Male,7110987654,suresh@gmail.com,PAN,DEFGH4567I
+18,Meena Choudhary,57,Female,6009876543,meena@hotmail.com,Aadhar,012345678901
+19,Aakash Deshmukh,21,Male,5898765432,aakash@gmail.com,Student ID,STU2023004
+20,Kavita Srinivasan,64,Female,4787654321,kavita@yahoo.com,Aadhar,123456789012
