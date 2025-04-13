@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import random
 import string
 
+flag = False
 # Database connection function
 def connect_to_db():
     try:
@@ -21,7 +22,7 @@ def connect_to_db():
 
 # Generate PNR function
 def generate_pnr():
-    return ''.join(random.choices(string.digits, k=10))
+    return ''.join(random.choices(string.digits, k=6))
 
 # Initialize session state
 if 'logged_in' not in st.session_state:
@@ -29,27 +30,65 @@ if 'logged_in' not in st.session_state:
     st.session_state.user_id = None
     st.session_state.username = None
     st.session_state.role = None
+if 'page' not in st.session_state:
+    st.session_state.page = "Login"
+if 'selected_train' not in st.session_state:
+    st.session_state.selected_train = ""
+if 'selected_class' not in st.session_state:
+    st.session_state.selected_class = "AC First Class (1A)"
+if 'from_station' not in st.session_state:
+    st.session_state.from_station = ""
+if 'to_station' not in st.session_state:
+    st.session_state.to_station = ""
+if 'journey_date' not in st.session_state:
+    st.session_state.journey_date = datetime.now().date()
+if 'trains_df' not in st.session_state:
+    st.session_state.trains_df = None
 
-# App title and sidebar
+# App title
 st.title("Indian Railway Ticket Reservation System")
 
-# Sidebar navigation
-page = st.sidebar.selectbox("Navigation", 
-                           ["Login", "Train Search", "Booking", "PNR Status", 
-                            "Cancellation", "My Bookings", "Admin Panel"])
+# Sidebar navigation with buttons instead of dropdown
+with st.sidebar:
+    st.header("Navigation")
+    
+    if st.button("Login", key="nav_login", use_container_width=True):
+        st.session_state.page = "Login"
+        st.rerun()
+        
+    if st.button("Train Search", key="nav_search", use_container_width=True):
+        st.session_state.page = "Train Search"
+        st.rerun()
+        
+    if st.button("Booking", key="nav_booking", use_container_width=True):
+        st.session_state.page = "Booking"
+        st.rerun()
+        
+    if st.button("PNR Status", key="nav_pnr", use_container_width=True):
+        st.session_state.page = "PNR Status"
+        st.rerun()
+        
+    if st.button("Cancellation", key="nav_cancel", use_container_width=True):
+        st.session_state.page = "Cancellation"
+        st.rerun()
+        
+    if st.button("My Bookings", key="nav_mybookings", use_container_width=True):
+        st.session_state.page = "My Bookings"
+        st.rerun()
 
-# Login page
-if page == "Login":
+# Content based on selected page
+if st.session_state.page == "Login":
     st.header("User Login")
     
     login_username = st.text_input("Username")
     login_password = st.text_input("Password", type="password")
     
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("Login"):
-            # In a real app, you would verify credentials against the database
-            # For demo, we'll use hardcoded values
+    # Instead of using columns, use container and alignment
+    login_col, register_col = st.columns([1, 1])
+    
+    with login_col:
+        if st.button("Login", use_container_width=True):
+            # Authentication logic remains the same
             if login_username == "user" and login_password == "password":
                 st.session_state.logged_in = True
                 st.session_state.user_id = 1001
@@ -65,65 +104,214 @@ if page == "Login":
             else:
                 st.error("Invalid username or password")
     
-    with col2:
-        if st.button("Register New User"):
+    with register_col:
+        if st.button("Register New User", use_container_width=True):
             st.info("Registration functionality would be implemented here")
 
 # Train Search page
-elif page == "Train Search":
+elif st.session_state.page == "Train Search":
     st.header("Search Trains")
+    
+    # Initialize search_performed in session state if not present
+    if 'search_performed' not in st.session_state:
+        st.session_state.search_performed = False
+    
+    # Get stations from database for dropdowns
+    def get_stations():
+        try:
+            conn = connect_to_db()
+            if conn:
+                cursor = conn.cursor()
+                cursor.execute('SELECT station_id, station_name, station_code, city, state FROM station ORDER BY station_name;')
+                result = cursor.fetchall()
+                stations = [(row[0], f"{row[1]} ({row[2]}) - {row[3]}, {row[4]}") for row in result]
+                cursor.close()
+                conn.close()
+                return stations
+            else:
+                st.error("Could not connect to database")
+                return []
+        except Exception as e:
+            st.error(f"Error fetching stations: {e}")
+            return []
+    
+    # Get available stations for dropdowns
+    stations = get_stations()
+    station_names = [station[1] for station in stations]
+    station_ids = [station[0] for station in stations]
+    station_dict = dict(zip(station_names, station_ids))
     
     col1, col2 = st.columns(2)
     
     with col1:
-        from_station = st.selectbox("From Station", 
-                                   ["Delhi (NDLS)", "Mumbai (CSTM)", "Chennai (MAS)", 
-                                    "Kolkata (KOAA)", "Bengaluru (SBC)"])
+        from_station = st.selectbox("From Station", station_names)
     
     with col2:
-        to_station = st.selectbox("To Station", 
-                                 ["Mumbai (CSTM)", "Delhi (NDLS)", "Bengaluru (SBC)", 
-                                  "Chennai (MAS)", "Hyderabad (SC)"])
+        to_station = st.selectbox("To Station", station_names)
     
     journey_date = st.date_input("Journey Date", min_value=datetime.now().date())
     
+    # Update session state with the station selections and date
+    st.session_state.from_station = from_station
+    st.session_state.to_station = to_station
+    st.session_state.journey_date = journey_date
+
     if st.button("Search Trains"):
-        # In a real app, this would query your database
-        # For demo, we'll create sample data
+        st.session_state.search_performed = True
         if from_station != to_station:
-            sample_trains = pd.DataFrame({
-                'Train Number': ['12309', '12951', '12910', '12301', '12259'],
-                'Train Name': ['Rajdhani Express', 'Shatabdi Express', 'Duronto Express', 'Howrah Mail', 'Garib Rath'],
-                'Departure': ['06:00', '08:30', '15:45', '23:55', '11:30'],
-                'Arrival': ['14:30', '13:00', '06:30', '13:40', '00:45'],
-                'Duration': ['8h 30m', '4h 30m', '14h 45m', '13h 45m', '13h 15m'],
-                'Available Seats': [42, 16, 8, 65, 27]
-            })
+            # Get source and destination station IDs
+            source_id = station_dict[from_station]
+            destination_id = station_dict[to_station]
             
-            st.write(f"Showing trains from {from_station} to {to_station} on {journey_date}")
-            st.dataframe(sample_trains)
-            
-            # Allow booking selection
-            selected_train = st.selectbox("Select Train to Book", sample_trains['Train Name'])
-            selected_class = st.selectbox("Select Class", 
-                                        ["AC First Class (1A)", "AC 2-Tier (2A)", "AC 3-Tier (3A)", 
-                                         "Sleeper (SL)", "Second Sitting (2S)"])
-            
-            if st.button("Proceed to Booking"):
-                if st.session_state.logged_in:
-                    st.session_state.booking_train = selected_train
-                    st.session_state.booking_class = selected_class
-                    st.session_state.from_station = from_station
-                    st.session_state.to_station = to_station
-                    st.session_state.journey_date = journey_date
-                    st.success(f"Selected {selected_train} in {selected_class}. Please navigate to the Booking page.")
+            # Query database for trains between these stations
+            try:
+                conn = connect_to_db()
+                if conn:
+                    cursor = conn.cursor()
+                    # Query to get trains between the selected stations
+                    query = """
+                    SELECT t.train_id, t.train_name, t.train_type, t.total_seats,
+                           s1.station_name as source_station, s2.station_name as destination_station
+                    FROM train t
+                    JOIN station s1 ON t.source_station_id = s1.station_id
+                    JOIN station s2 ON t.destination_station_id = s2.station_id
+                    WHERE (t.source_station_id = %s AND t.destination_station_id = %s)
+                       OR (t.source_station_id = %s AND t.destination_station_id = %s)
+                    """
+                    cursor.execute(query, (source_id, destination_id, destination_id, source_id))
+                    result = cursor.fetchall()
+                    
+                    if result:
+                        # Create DataFrame from results
+                        trains_df = pd.DataFrame(result, columns=['Train ID', 'Train Name', 'Train Type', 'Total Seats', 
+                                                                 'Source Station', 'Destination Station'])
+                        
+                        # Add some sample departure/arrival times and available seats
+                        # In a real app, you would get this from schedule and seat availability tables
+                        trains_df['Departure'] = ['06:00', '08:30', '15:45', '23:55', '11:30'][:len(trains_df)]
+                        trains_df['Arrival'] = ['14:30', '13:00', '06:30', '13:40', '00:45'][:len(trains_df)]
+                        trains_df['Duration'] = ['8h 30m', '4h 30m', '14h 45m', '13h 45m', '13h 15m'][:len(trains_df)]
+                        trains_df['Available Seats'] = [random.randint(10, 100) for _ in range(len(trains_df))]
+                        
+                        st.write(f"Showing trains from {from_station} to {to_station} on {journey_date}")
+                        st.dataframe(trains_df[['Train ID', 'Train Name', 'Train Type', 'Departure', 'Arrival', 'Duration', 'Available Seats']])
+                        
+                        # Store trains_df in session state for reuse
+                        st.session_state.trains_df = trains_df
+                        
+                        # Define callback functions to update session state
+                        def update_selected_train():
+                            st.session_state.selected_train = st.session_state.train_select
+
+                        def update_selected_class():
+                            st.session_state.selected_class = st.session_state.class_select
+
+                        # If trains_df exists and is not empty
+                        if not trains_df.empty:
+                            # Use the callback to update session state
+                            train_names = trains_df['Train Name'].tolist()
+                            
+                            # Set default value for train selection if not already in session state
+                            if not st.session_state.selected_train or st.session_state.selected_train not in train_names:
+                                st.session_state.selected_train = train_names[0]
+                            
+                            # Create the selectbox with on_change callback
+                            selected_train = st.selectbox(
+                                "Select Train to Book", 
+                                train_names,
+                                index=train_names.index(st.session_state.selected_train),
+                                key="train_select",
+                                on_change=update_selected_train
+                            )
+                            
+                            # Class options with callback
+                            class_options = ["AC First Class (1A)", "AC 2-Tier (2A)", "AC 3-Tier (3A)", "Sleeper (SL)", "Second Sitting (2S)"]
+                            
+                            selected_class = st.selectbox(
+                                "Select Class", 
+                                class_options,
+                                index=class_options.index(st.session_state.selected_class),
+                                key="class_select",
+                                on_change=update_selected_class
+                            )
+                            
+                            # The proceed to booking button remains the same
+                            if st.button("Proceed to Booking"):
+                                if st.session_state.logged_in:
+                                    st.session_state.booking_train = st.session_state.selected_train
+                                    st.session_state.booking_class = st.session_state.selected_class
+                                    st.session_state.from_station = from_station
+                                    st.session_state.to_station = to_station
+                                    st.session_state.journey_date = journey_date
+                                    st.session_state.page = "Booking"
+                                    st.rerun()
+                                else:
+                                    st.warning("Please login first to book tickets")
+                    else:
+                        st.warning("No trains found between these stations. Try different stations.")
+                    
+                    cursor.close()
+                    conn.close()
                 else:
-                    st.warning("Please login first to book tickets")
+                    st.error("Could not connect to database")
+            except Exception as e:
+                st.error(f"Error searching for trains: {e}")
         else:
             st.error("Source and destination stations cannot be the same")
 
+    # Display previous search results if they exist (even if button wasn't just clicked)
+    if st.session_state.search_performed and 'trains_df' in st.session_state and st.session_state.trains_df is not None:
+        # If we have previous search results, display them
+        trains_df = st.session_state.trains_df
+       
+        # Define callback functions to update session state
+        def update_selected_train():
+            st.session_state.selected_train = st.session_state.train_select
+
+        def update_selected_class():
+            st.session_state.selected_class = st.session_state.class_select
+
+        # If trains_df exists and is not empty
+        if not trains_df.empty:
+            # Use the callback to update session state
+            train_names = trains_df['Train Name'].tolist()
+            
+            # Set default value for train selection if not already in session state
+            if not st.session_state.selected_train or st.session_state.selected_train not in train_names:
+                st.session_state.selected_train = train_names[0]
+            
+            # Create the selectbox with on_change callback
+            selected_train = st.selectbox(
+                "Select Train to Book", 
+                train_names,
+                index=train_names.index(st.session_state.selected_train),
+                key="train_select",
+                on_change=update_selected_train
+            )
+            
+            # Class options with callback
+            class_options = ["AC First Class (1A)", "AC 2-Tier (2A)", "AC 3-Tier (3A)", "Sleeper (SL)", "Second Sitting (2S)"]
+            
+            selected_class = st.selectbox(
+                "Select Class", 
+                class_options,
+                index=class_options.index(st.session_state.selected_class),
+                key="class_select",
+                on_change=update_selected_class
+            )
+            
+            # Book button
+            if st.button("Proceed to Booking"):
+                if st.session_state.logged_in:
+                    st.session_state.booking_train = st.session_state.selected_train
+                    st.session_state.selected_class = st.session_state.selected_class
+                    st.session_state.page = "Booking"
+                    st.rerun()
+                else:
+                    st.warning("Please login first to book tickets")
+
 # Booking page
-elif page == "Booking":
+elif st.session_state.page == "Booking":
     st.header("Book Tickets")
     
     if not st.session_state.logged_in:
@@ -156,7 +344,7 @@ elif page == "Booking":
         
         if has_concession:
             concession_type = st.selectbox("Concession Type", 
-                                         ["Senior Citizen", "Student", "Disabled", "Freedom Fighter"])
+                                         ["Senior Citizen (Male)","Senior Citizen (Female)", "Student", "Disabled", "Armed Forces", "War Widow", "Paramilitary Forces", "Press Correspondents"])
             concession_id = st.text_input("Concession ID / Document Number")
         
         # Berth preference
@@ -169,12 +357,40 @@ elif page == "Booking":
         # Payment options
         st.subheader("Payment Details")
         
+        # Dynamically compute fare details based on concession (if applied)
+        base_fare = 1240.00
+        reservation_charge = 40.00
+        superfast_charge = 45.00
+        GST_rate = 5.00
+        
+        discount_mapping = {
+            "senior citizen (male)": 40.0,
+            "senior citizen (female)": 50.0,
+            "student": 25.0,
+            "disabled": 50.0,
+            "armed forces": 30.0,
+            "war widow": 75.0,
+            "paramilitary forces": 30.0,
+            "press correspondents": 50.0
+        }
+        
+        discount_rate = 0.0
+        # If concession is requested, obtain discount percentage (case-insensitive)
+        if 'has_concession' in locals() and has_concession:
+            discount_rate = discount_mapping.get(concession_type.lower(), 0.0)
+        
+        discount_amount = base_fare * (discount_rate / 100)
+        effective_base_fare = base_fare - discount_amount
+        fare_without_tax = effective_base_fare + reservation_charge + superfast_charge
+        GST_amount = fare_without_tax * (GST_rate / 100)
+        total_fare = fare_without_tax + GST_amount
+        
         fare_details = {
-            "Base Fare": "₹ 1,240.00",
-            "Reservation Charges": "₹ 40.00",
-            "Superfast Charges": "₹ 45.00",
-            "GST (5%)": "₹ 66.25",
-            "Total Fare": "₹ 1,391.25"
+            "Base Fare": f"₹ {effective_base_fare:.2f}",
+            "Reservation Charges": f"₹ {reservation_charge:.2f}",
+            "Superfast Charges": f"₹ {superfast_charge:.2f}",
+            "GST (5%)": f"₹ {GST_amount:.2f}",
+            "Total Fare": f"₹ {total_fare:.2f}"
         }
         
         for item, amount in fare_details.items():
@@ -190,44 +406,105 @@ elif page == "Booking":
         if st.button("Proceed to Payment"):
             st.success("Booking Successful!")
             pnr = generate_pnr()
-            st.info(f"Your PNR number is: {pnr}")
+            st.info(f"Your PNR number is: PNR{pnr}")
             st.info("Ticket details have been sent to your email.")
 
 # PNR Status page
-elif page == "PNR Status":
+elif st.session_state.page == "PNR Status":
     st.header("Check PNR Status")
     
     pnr_number = st.text_input("Enter PNR Number")
     
     if st.button("Check Status"):
-        if pnr_number and len(pnr_number) == 10 and pnr_number.isdigit():
-            # In a real app, this would query your database
-            # For demo, we'll create sample data
-            st.success("PNR Found")
-            
-            pnr_data = {
-                "PNR Number": pnr_number,
-                "Train": "12309 Rajdhani Express",
-                "From": "Delhi (NDLS)",
-                "To": "Mumbai (CSTM)",
-                "Date of Journey": "15-Apr-2025",
-                "Class": "AC 3-Tier (3A)",
-                "Status": "Confirmed (B2, 42)",
-                "Passenger 1": "John Doe (Confirmed)",
-                "Passenger 2": "Jane Doe (Confirmed)"
-            }
-            
-            for field, value in pnr_data.items():
-                col1, col2 = st.columns([1, 2])
-                with col1:
-                    st.write(f"**{field}:**")
-                with col2:
-                    st.write(value)
+        if pnr_number:
+            # Query the database for the PNR
+            try:
+                conn = connect_to_db()
+                if conn:
+                    cursor = conn.cursor(dictionary=True)
+                    
+                    # Query to get ticket information based on PNR number
+                    ticket_query = """
+                    SELECT 
+                        t.ticket_id, t.pnr_number, t.journey_date, t.seat_number, t.status, t.fare,
+                        tr.train_id, tr.train_name, tr.train_type,
+                        c.class_name,
+                        s1.station_name as from_station, s1.station_code as from_code,
+                        s2.station_name as to_station, s2.station_code as to_code,
+                        p.passenger_id, p.name as passenger_name, p.age, p.gender, 
+                        IFNULL(t.concession_applied, 0) as concession_applied
+                    FROM ticket t
+                    JOIN train tr ON t.train_id = tr.train_id
+                    JOIN class c ON t.class_id = c.class_id
+                    JOIN station s1 ON t.from_station_id = s1.station_id
+                    JOIN station s2 ON t.to_station_id = s2.station_id
+                    JOIN passenger p ON t.passenger_id = p.passenger_id
+                    WHERE t.pnr_number = %s
+                    """
+                    cursor.execute(ticket_query, (pnr_number,))
+                    ticket_results = cursor.fetchall()
+                    
+                    if ticket_results:
+                        st.success("PNR Found")
+                        
+                        # Get the first result for common ticket information
+                        first_result = ticket_results[0]
+                        
+                        # Display ticket details
+                        common_data = {
+                            "PNR Number": first_result['pnr_number'],
+                            "Train": first_result['train_name'],
+                            "Train Type": first_result['train_type'],
+                            "From": f"{first_result['from_station']} ({first_result['from_code']})",
+                            "To": f"{first_result['to_station']} ({first_result['to_code']})",
+                            "Date of Journey": first_result['journey_date'].strftime('%d-%b-%Y') if isinstance(first_result['journey_date'], datetime) else first_result['journey_date'],
+                            "Class": first_result['class_name'],
+                            "Status": first_result['status']
+                        }
+                        
+                        # Display common ticket details
+                        for field, value in common_data.items():
+                            col1, col2 = st.columns([1, 2])
+                            with col1:
+                                st.write(f"**{field}:**")
+                            with col2:
+                                st.write(value)
+                        
+                        # Display passenger details
+                        st.subheader("Passenger Details")
+                        for i, passenger in enumerate(ticket_results):
+                            seat_info = f" ({passenger['seat_number']})" if passenger['seat_number'] else ""
+                            passenger_status = f"{passenger['status']}{seat_info}"
+                            st.write(f"**Passenger {i+1}:** {passenger['passenger_name']} ({passenger['age']}, {passenger['gender']}) - {passenger_status}")
+                            
+                            # Show concession details if applied
+                            if passenger['concession_applied'] > 0:
+                                st.write(f"   *Concession Applied: ₹{passenger['concession_applied']}*")
+                        
+                        # Display fare details
+                        st.subheader("Fare Details")
+                        total_fare = sum(p['fare'] for p in ticket_results)
+                        total_concession = sum(p['concession_applied'] for p in ticket_results)
+                        
+                        st.write(f"**Base Fare:** ₹{total_fare + total_concession}")
+                        if total_concession > 0:
+                            st.write(f"**Concession Applied:** ₹{total_concession}")
+                        st.write(f"**Final Fare:** ₹{total_fare}")
+                        
+                    else:
+                        st.error(f"No ticket found with PNR number: {pnr_number}")
+                    
+                    cursor.close()
+                    conn.close()
+                else:
+                    st.error("Database connection failed. Please try again later.")
+            except Exception as e:
+                st.error(f"Error retrieving ticket information: {e}")
         else:
-            st.error("Please enter a valid 10-digit PNR number")
+            st.error("Please enter a valid PNR number")
 
 # Cancellation page
-elif page == "Cancellation":
+elif st.session_state.page == "Cancellation":
     st.header("Cancel Tickets")
     
     if not st.session_state.logged_in:
@@ -236,60 +513,185 @@ elif page == "Cancellation":
         pnr_number = st.text_input("Enter PNR Number to Cancel")
         
         if st.button("Search Ticket"):
-            if pnr_number and len(pnr_number) == 10 and pnr_number.isdigit():
-                # In a real app, this would query your database
-                # For demo, we'll create sample data
-                st.success("Ticket Found")
-                
-                ticket_data = {
-                    "PNR Number": pnr_number,
-                    "Train": "12309 Rajdhani Express",
-                    "From": "Delhi (NDLS)",
-                    "To": "Mumbai (CSTM)",
-                    "Date of Journey": "15-Apr-2025",
-                    "Class": "AC 3-Tier (3A)",
-                }
-                
-                for field, value in ticket_data.items():
-                    col1, col2 = st.columns([1, 2])
-                    with col1:
-                        st.write(f"**{field}:**")
-                    with col2:
-                        st.write(value)
-                
-                passengers = [
-                    {"name": "John Doe", "age": 35, "gender": "Male", "status": "Confirmed (B2, 42)"},
-                    {"name": "Jane Doe", "age": 32, "gender": "Female", "status": "Confirmed (B2, 44)"}
-                ]
-                
-                st.subheader("Passengers")
-                for i, passenger in enumerate(passengers):
-                    col1, col2, col3, col4, col5 = st.columns([3, 1, 1, 2, 1])
-                    with col1:
-                        st.write(passenger["name"])
-                    with col2:
-                        st.write(passenger["age"])
-                    with col3:
-                        st.write(passenger["gender"])
-                    with col4:
-                        st.write(passenger["status"])
-                    with col5:
-                        st.checkbox(f"Select", key=f"cancel_passenger_{i}")
-                
-                reason = st.selectbox("Reason for Cancellation", 
-                                    ["Change of plans", "Emergency", "Duplicate booking", "Other"])
-                
-                st.warning("Cancellation Charges: ₹ 348.00")
-                st.success("Refund Amount: ₹ 1,043.25")
-                
-                if st.button("Confirm Cancellation"):
-                    st.success("Ticket cancelled successfully!")
-                    st.info("Refund has been initiated and will be credited within 5-7 working days.")
+            if pnr_number:
+                # Query the database for the PNR
+                try:
+                    conn = connect_to_db()
+                    if conn:
+                        cursor = conn.cursor(dictionary=True)
+                        
+                        # Query to get ticket information based on PNR number
+                        ticket_query = """
+                        SELECT 
+                            t.ticket_id, t.pnr_number, t.journey_date, t.seat_number, t.status, t.fare,
+                            tr.train_id, tr.train_name, tr.train_type,
+                            c.class_name,
+                            s1.station_name as from_station, s1.station_code as from_code,
+                            s2.station_name as to_station, s2.station_code as to_code,
+                            p.passenger_id, p.name as passenger_name, p.age, p.gender
+                        FROM ticket t
+                        JOIN train tr ON t.train_id = tr.train_id
+                        JOIN class c ON t.class_id = c.class_id
+                        JOIN station s1 ON t.from_station_id = s1.station_id
+                        JOIN station s2 ON t.to_station_id = s2.station_id
+                        JOIN passenger p ON t.passenger_id = p.passenger_id
+                        LEFT JOIN cancellation cn ON t.ticket_id = cn.ticket_id
+                        WHERE t.pnr_number = %s AND cn.cancellation_id IS NULL
+                        """
+                        cursor.execute(ticket_query, (pnr_number,))
+                        ticket_results = cursor.fetchall()
+                        
+                        if ticket_results:
+                            st.success("Ticket Found")
+                            
+                            # Get the first result for common ticket information
+                            first_result = ticket_results[0]
+                            
+                            # Store ticket ID in session state for cancellation
+                            st.session_state.ticket_id = first_result['ticket_id']
+                            st.session_state.ticket_fare = float(first_result['fare'])  # Convert Decimal to float
+                            
+                            # Display ticket details
+                            ticket_data = {
+                                "PNR Number": first_result['pnr_number'],
+                                "Train": first_result['train_name'],
+                                "Train Type": first_result['train_type'],
+                                "From": f"{first_result['from_station']} ({first_result['from_code']})",
+                                "To": f"{first_result['to_station']} ({first_result['to_code']})",
+                                "Date of Journey": first_result['journey_date'].strftime('%d-%b-%Y') if isinstance(first_result['journey_date'], datetime) else first_result['journey_date'],
+                                "Class": first_result['class_name'],
+                                "Status": first_result['status']
+                            }
+                            
+                            for field, value in ticket_data.items():
+                                col1, col2 = st.columns([1, 2])
+                                with col1:
+                                    st.write(f"**{field}:**")
+                                with col2:
+                                    st.write(value)
+                            
+                            # Display passenger details with checkboxes for selection
+                            st.subheader("Passengers")
+                            
+                            passengers = []
+                            for i, passenger in enumerate(ticket_results):
+                                seat_info = f" ({passenger['seat_number']})" if passenger['seat_number'] else ""
+                                passenger_status = f"{passenger['status']}{seat_info}"
+                                
+                                col1, col2, col3, col4, col5 = st.columns([3, 1, 1, 2, 1])
+                                with col1:
+                                    st.write(passenger["passenger_name"])
+                                with col2:
+                                    st.write(passenger["age"])
+                                with col3:
+                                    st.write(passenger["gender"])
+                                with col4:
+                                    st.write(passenger_status)
+                                with col5:
+                                    selected = st.checkbox(f"Select", key=f"cancel_passenger_{i}", value=True)
+                                    if selected:
+                                        passengers.append(passenger)
+                            
+                            # Calculate cancellation charges and refund amount
+                            # In a real app, this would be based on railway rules, journey date, etc.
+                            journey_date = first_result['journey_date']
+                            current_date = datetime.now().date()
+                            
+                            # Simple logic: 
+                            # - If journey date is more than 7 days away: 20% charge
+                            # - If journey date is between 2-7 days away: 30% charge
+                            # - If journey date is less than 2 days away: 50% charge
+                            days_to_journey = (journey_date - current_date).days if isinstance(journey_date, datetime) else 5
+                            
+                            if days_to_journey > 7:
+                                cancellation_percentage = 0.20
+                            elif days_to_journey >= 2:
+                                cancellation_percentage = 0.30
+                            else:
+                                cancellation_percentage = 0.50
+                            
+                            # Convert fare to float to avoid decimal multiplication error
+                            total_fare = float(first_result['fare'])
+                            cancellation_charge = round(total_fare * cancellation_percentage, 2)
+                            refund_amount = round(total_fare - cancellation_charge, 2)
+                            
+                            # Store refund amount in session state
+                            st.session_state.refund_amount = refund_amount
+                            
+                            reason = st.selectbox("Reason for Cancellation", 
+                                                ["Change of plans", "Emergency", "Duplicate booking", "Other"])
+                            
+                            st.warning(f"Cancellation Charges: ₹ {cancellation_charge}")
+                            st.success(f"Refund Amount: ₹ {refund_amount}")
+                            
+                            if st.button("Confirm Cancellation"):
+                                try:
+                                    conn = connect_to_db()
+                                    if conn:
+                                        cursor = conn.cursor()
+                                        
+                                        # Store the reason for future reference
+                                        st.session_state.cancellation_reason = reason
+                                        
+                                        # Insert into cancellation table with refund status as Pending
+                                        insert_query = """
+                                        INSERT INTO cancellation 
+                                        (ticket_id, cancellation_date, refund_amount, refund_status) 
+                                        VALUES (%s, %s, %s, %s)
+                                        """
+                                        
+                                        current_date = datetime.now()
+                                        
+                                        cursor.execute(insert_query, (
+                                            st.session_state.ticket_id,
+                                            current_date,
+                                            st.session_state.refund_amount,
+                                            "Pending"
+                                        ))
+                                        
+                                        # Get the newly inserted cancellation_id
+                                        cursor.execute("SELECT LAST_INSERT_ID()")
+                                        cancellation_id = cursor.fetchone()[0]
+                                        
+                                        # Commit the transaction
+                                        conn.commit()
+                                        
+                                        # Update ticket status to Cancelled in ticket table
+                                        update_query = """
+                                        UPDATE ticket SET status = 'Cancelled' WHERE ticket_id = %s
+                                        """
+                                        cursor.execute(update_query, (st.session_state.ticket_id,))
+                                        conn.commit()
+                                        
+                                        cursor.close()
+                                        conn.close()
+                                        
+                                        st.success("Ticket cancelled successfully!")
+                                        st.info(f"Cancellation ID: {cancellation_id}")
+                                        st.info(f"Cancellation Date: {current_date.strftime('%d-%b-%Y %H:%M:%S')}")
+                                        st.info(f"Refund Amount: ₹{st.session_state.refund_amount}")
+                                        st.info(f"Refund Status: Pending")
+                                        st.info("Refund has been initiated and will be credited within 5-7 working days.")
+                                        
+                                    else:
+                                        st.error("Database connection failed. Please try again later.")
+                                except Exception as e:
+                                    st.error(f"Error cancelling ticket: {e}")
+                        else:
+                            st.error(f"No valid ticket found with PNR number: {pnr_number}")
+                            st.info("The ticket may not exist, already be cancelled, or the journey date has passed.")
+                        
+                        cursor.close()
+                        conn.close()
+                    else:
+                        st.error("Database connection failed. Please try again later.")
+                except Exception as e:
+                    st.error(f"Error retrieving ticket information: {e}")
             else:
-                st.error("Please enter a valid 10-digit PNR number")
+                st.error("Please enter a valid PNR number")
 
 # My Bookings page
-elif page == "My Bookings":
+elif st.session_state.page == "My Bookings":
     st.header("My Bookings")
     
     if not st.session_state.logged_in:
@@ -361,240 +763,6 @@ elif page == "My Bookings":
                             st.write(f"**Status:** {row['Status']}")
             else:
                 st.info("No past journeys found")
-
-# Admin Panel page
-elif page == "Admin Panel":
-    st.header("Admin Panel")
-    
-    if not st.session_state.logged_in:
-        st.warning("Please login as admin to access this panel")
-    elif st.session_state.role != "admin":
-        st.error("You don't have permission to access the admin panel")
-    else:
-        # Admin tabs
-        admin_tab = st.tabs(["Dashboard", "Manage Trains", "Manage Schedules", "Manage Fares", "System Users"])
-        
-        with admin_tab[0]:
-            st.subheader("Dashboard")
-            
-            # Mock statistics
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric(label="Bookings Today", value="1,245", delta="+12%")
-            with col2:
-                st.metric(label="Revenue Today", value="₹ 8.2L", delta="+8%")
-            with col3:
-                st.metric(label="Active Waitlists", value="436", delta="-5%")
-            
-            # Mock charts
-            chart_data = pd.DataFrame({
-                'date': pd.date_range(start='2025-03-01', periods=30, freq='D'),
-                'bookings': [random.randint(800, 1500) for _ in range(30)],
-                'revenue': [random.randint(500000, 1000000) for _ in range(30)]
-            })
-            
-            st.subheader("Booking Trends")
-            st.line_chart(chart_data.set_index('date')['bookings'])
-            
-            st.subheader("Revenue Trends")
-            st.line_chart(chart_data.set_index('date')['revenue'])
-            
-            # Busiest routes
-            st.subheader("Busiest Routes")
-            busiest_routes = pd.DataFrame({
-                'Route': ['Delhi-Mumbai', 'Mumbai-Bengaluru', 'Chennai-Delhi', 
-                         'Kolkata-Delhi', 'Hyderabad-Chennai'],
-                'Passengers': [4528, 3982, 3541, 3125, 2987]
-            })
-            st.dataframe(busiest_routes)
-        
-        with admin_tab[1]:
-            st.subheader("Manage Trains")
-            
-            # Add new train form
-            with st.expander("Add New Train"):
-                col1, col2 = st.columns(2)
-                with col1:
-                    train_number = st.text_input("Train Number")
-                    train_name = st.text_input("Train Name")
-                    train_type = st.selectbox("Train Type", ["Rajdhani", "Shatabdi", "Duronto", "Superfast", "Express", "Passenger"])
-                
-                with col2:
-                    source = st.selectbox("Source Station", ["Delhi", "Mumbai", "Chennai", "Kolkata", "Bengaluru"])
-                    destination = st.selectbox("Destination Station", ["Mumbai", "Delhi", "Bengaluru", "Chennai", "Hyderabad"])
-                    total_seats = st.number_input("Total Seats", min_value=100, max_value=2000, value=1000)
-                
-                st.subheader("Class Configuration")
-                
-                col1, col2, col3 = st.columns(3)
-                
-                with col1:
-                    has_1ac = st.checkbox("AC First Class (1A)")
-                    if has_1ac:
-                        seats_1ac = st.number_input("1A Seats", min_value=1, max_value=100, value=18)
-                
-                with col2:
-                    has_2ac = st.checkbox("AC 2-Tier (2A)")
-                    if has_2ac:
-                        seats_2ac = st.number_input("2A Seats", min_value=1, max_value=200, value=46)
-                
-                with col3:
-                    has_3ac = st.checkbox("AC 3-Tier (3A)")
-                    if has_3ac:
-                        seats_3ac = st.number_input("3A Seats", min_value=1, max_value=500, value=72)
-                
-                col1, col2, col3 = st.columns(3)
-                
-                with col1:
-                    has_sl = st.checkbox("Sleeper (SL)")
-                    if has_sl:
-                        seats_sl = st.number_input("SL Seats", min_value=1, max_value=1000, value=288)
-                
-                with col2:
-                    has_2s = st.checkbox("Second Sitting (2S)")
-                    if has_2s:
-                        seats_2s = st.number_input("2S Seats", min_value=1, max_value=1000, value=576)
-                
-                if st.button("Add Train"):
-                    st.success(f"Train {train_number} {train_name} added successfully")
-            
-            # List existing trains
-            st.subheader("Existing Trains")
-            existing_trains = pd.DataFrame({
-                'Train Number': ['12309', '12951', '12910', '12301', '12259'],
-                'Train Name': ['Rajdhani Express', 'Shatabdi Express', 'Duronto Express', 'Howrah Mail', 'Garib Rath'],
-                'Source': ['Delhi', 'Mumbai', 'Chennai', 'Kolkata', 'Bengaluru'],
-                'Destination': ['Mumbai', 'Delhi', 'Delhi', 'Delhi', 'Chennai'],
-                'Type': ['Rajdhani', 'Shatabdi', 'Duronto', 'Superfast', 'Express'],
-                'Status': ['Active', 'Active', 'Active', 'Active', 'Active']
-            })
-            
-            st.dataframe(existing_trains)
-            
-            # Edit selected train
-            selected_train_number = st.selectbox("Select Train to Edit", existing_trains['Train Number'])
-            if st.button("Edit Selected Train"):
-                st.info(f"Editing train {selected_train_number}")
-        
-        with admin_tab[2]:
-            st.subheader("Manage Schedules")
-            
-            # Schedule management interface here
-            train_for_schedule = st.selectbox("Select Train", ['12309 Rajdhani Express', '12951 Shatabdi Express'])
-            
-            # Add station to route
-            with st.expander("Add Station to Route"):
-                col1, col2 = st.columns(2)
-                with col1:
-                    station = st.selectbox("Station", ["Delhi", "Mumbai", "Chennai", "Kolkata", "Nagpur", "Jaipur"])
-                    arrival = st.time_input("Arrival Time", datetime.now().time())
-                
-                with col2:
-                    sequence = st.number_input("Sequence Number", min_value=1, max_value=20, value=1)
-                    departure = st.time_input("Departure Time", (datetime.now() + timedelta(minutes=10)).time())
-                
-                distance = st.number_input("Distance from Source (km)", min_value=0, max_value=5000, value=0)
-                
-                if st.button("Add Station"):
-                    st.success(f"Station {station} added to route at sequence {sequence}")
-            
-            # View current route
-            st.subheader("Current Route")
-            route_data = pd.DataFrame({
-                'Seq': [1, 2, 3, 4],
-                'Station': ['Delhi', 'Mathura', 'Kota', 'Mumbai'],
-                'Arrival': ['--:--', '08:25', '11:35', '16:50'],
-                'Departure': ['06:55', '08:30', '11:40', '--:--'],
-                'Distance': ['0', '150', '458', '1386']
-            })
-            
-            st.dataframe(route_data)
-        
-        with admin_tab[3]:
-            st.subheader("Manage Fares")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                train_for_fare = st.selectbox("Select Train", ['12309 Rajdhani Express', '12951 Shatabdi Express'], key='fare_train')
-            with col2:
-                class_for_fare = st.selectbox("Select Class", ["AC First Class (1A)", "AC 2-Tier (2A)", "AC 3-Tier (3A)"])
-            
-            st.subheader("Base Fare Settings")
-            
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                base_fare = st.number_input("Base Fare per KM", min_value=0.1, max_value=10.0, value=1.8, step=0.1)
-            with col2:
-                reservation_charge = st.number_input("Reservation Charge", min_value=0, max_value=100, value=40)
-            with col3:
-                superfast_charge = st.number_input("Superfast Charge", min_value=0, max_value=100, value=45)
-            
-            gst = st.slider("GST Percentage", min_value=0, max_value=18, value=5)
-            
-            if st.button("Update Fare Structure"):
-                st.success("Fare structure updated successfully")
-            
-            # Fare preview
-            st.subheader("Fare Preview")
-            st.info(f"For a 1000 km journey on {train_for_fare} in {class_for_fare}")
-            
-            fare_calculation = {
-                "Base Fare (1000 km × ₹1.8)": "₹ 1,800.00",
-                "Reservation Charges": f"₹ {reservation_charge}.00",
-                "Superfast Charges": f"₹ {superfast_charge}.00",
-                f"GST ({gst}%)": f"₹ {round((1800 + reservation_charge + superfast_charge) * gst/100, 2)}",
-                "Total Fare": f"₹ {round((1800 + reservation_charge + superfast_charge) * (1 + gst/100), 2)}"
-            }
-            
-            for item, amount in fare_calculation.items():
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    st.write(item)
-                with col2:
-                    st.write(amount)
-        
-        with admin_tab[4]:
-            st.subheader("System Users")
-            
-            # User management interface
-            user_tab1, user_tab2 = st.tabs(["User List", "Add User"])
-            
-            with user_tab1:
-                users = pd.DataFrame({
-                    'User ID': [1001, 1002, 9001, 9002],
-                    'Username': ['user', 'john_doe', 'admin', 'manager'],
-                    'Role': ['passenger', 'passenger', 'admin', 'manager'],
-                    'Status': ['Active', 'Active', 'Active', 'Inactive'],
-                    'Last Login': ['2025-04-13 09:45:22', '2025-04-12 18:32:11', '2025-04-13 10:05:17', '2025-04-05 14:22:33']
-                })
-                
-                st.dataframe(users)
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    user_to_edit = st.selectbox("Select User", users['Username'])
-                with col2:
-                    action = st.selectbox("Action", ["Reset Password", "Deactivate", "Change Role"])
-                
-                if st.button("Apply Action"):
-                    st.success(f"Action '{action}' applied to user '{user_to_edit}'")
-            
-            with user_tab2:
-                col1, col2 = st.columns(2)
-                with col1:
-                    new_username = st.text_input("Username")
-                    new_password = st.text_input("Password", type="password")
-                    confirm_password = st.text_input("Confirm Password", type="password")
-                
-                with col2:
-                    new_role = st.selectbox("Role", ["passenger", "manager", "admin"])
-                    new_status = st.selectbox("Status", ["Active", "Inactive"])
-                
-                if st.button("Add User"):
-                    if new_password == confirm_password:
-                        st.success(f"User '{new_username}' added successfully")
-                    else:
-                        st.error("Passwords do not match")
 
 # Add logout button to sidebar if logged in
 if st.session_state.logged_in:
