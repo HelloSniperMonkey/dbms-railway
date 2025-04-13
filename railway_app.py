@@ -764,6 +764,7 @@ elif st.session_state.page == "My Bookings":
             else:
                 st.info("No past journeys found")
 
+
 # Add logout button to sidebar if logged in
 if st.session_state.logged_in:
     st.sidebar.write(f"Logged in as: {st.session_state.username}")
