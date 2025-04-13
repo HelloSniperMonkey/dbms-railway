@@ -199,54 +199,6 @@ elif st.session_state.page == "Train Search":
                         # Store trains_df in session state for reuse
                         st.session_state.trains_df = trains_df
                         
-                        # Define callback functions to update session state
-                        def update_selected_train():
-                            st.session_state.selected_train = st.session_state.train_select
-
-                        def update_selected_class():
-                            st.session_state.selected_class = st.session_state.class_select
-
-                        # If trains_df exists and is not empty
-                        if not trains_df.empty:
-                            # Use the callback to update session state
-                            train_names = trains_df['Train Name'].tolist()
-                            
-                            # Set default value for train selection if not already in session state
-                            if not st.session_state.selected_train or st.session_state.selected_train not in train_names:
-                                st.session_state.selected_train = train_names[0]
-                            
-                            # Create the selectbox with on_change callback
-                            selected_train = st.selectbox(
-                                "Select Train to Book", 
-                                train_names,
-                                index=train_names.index(st.session_state.selected_train),
-                                key="train_select",
-                                on_change=update_selected_train
-                            )
-                            
-                            # Class options with callback
-                            class_options = ["AC First Class (1A)", "AC 2-Tier (2A)", "AC 3-Tier (3A)", "Sleeper (SL)", "Second Sitting (2S)"]
-                            
-                            selected_class = st.selectbox(
-                                "Select Class", 
-                                class_options,
-                                index=class_options.index(st.session_state.selected_class),
-                                key="class_select",
-                                on_change=update_selected_class
-                            )
-                            
-                            # The proceed to booking button remains the same
-                            if st.button("Proceed to Booking"):
-                                if st.session_state.logged_in:
-                                    st.session_state.booking_train = st.session_state.selected_train
-                                    st.session_state.booking_class = st.session_state.selected_class
-                                    st.session_state.from_station = from_station
-                                    st.session_state.to_station = to_station
-                                    st.session_state.journey_date = journey_date
-                                    st.session_state.page = "Booking"
-                                    st.rerun()
-                                else:
-                                    st.warning("Please login first to book tickets")
                     else:
                         st.warning("No trains found between these stations. Try different stations.")
                     
@@ -259,17 +211,17 @@ elif st.session_state.page == "Train Search":
         else:
             st.error("Source and destination stations cannot be the same")
 
-    # Display previous search results if they exist (even if button wasn't just clicked)
+    # Display train selection UI only once - either after search or for previous results
     if st.session_state.search_performed and 'trains_df' in st.session_state and st.session_state.trains_df is not None:
         # If we have previous search results, display them
         trains_df = st.session_state.trains_df
-       
+        
         # Define callback functions to update session state
         def update_selected_train():
-            st.session_state.selected_train = st.session_state.train_select
+            st.session_state.selected_train = st.session_state.train_select_key
 
         def update_selected_class():
-            st.session_state.selected_class = st.session_state.class_select
+            st.session_state.selected_class = st.session_state.class_select_key
 
         # If trains_df exists and is not empty
         if not trains_df.empty:
@@ -280,23 +232,23 @@ elif st.session_state.page == "Train Search":
             if not st.session_state.selected_train or st.session_state.selected_train not in train_names:
                 st.session_state.selected_train = train_names[0]
             
-            # Create the selectbox with on_change callback
+            # Create the selectbox with on_change callback - using unique keys
             selected_train = st.selectbox(
                 "Select Train to Book", 
                 train_names,
                 index=train_names.index(st.session_state.selected_train),
-                key="train_select",
+                key="train_select_key",
                 on_change=update_selected_train
             )
             
-            # Class options with callback
+            # Class options with callback - using unique keys
             class_options = ["AC First Class (1A)", "AC 2-Tier (2A)", "AC 3-Tier (3A)", "Sleeper (SL)", "Second Sitting (2S)"]
             
             selected_class = st.selectbox(
                 "Select Class", 
                 class_options,
                 index=class_options.index(st.session_state.selected_class),
-                key="class_select",
+                key="class_select_key", 
                 on_change=update_selected_class
             )
             
@@ -304,7 +256,10 @@ elif st.session_state.page == "Train Search":
             if st.button("Proceed to Booking"):
                 if st.session_state.logged_in:
                     st.session_state.booking_train = st.session_state.selected_train
-                    st.session_state.selected_class = st.session_state.selected_class
+                    st.session_state.booking_class = st.session_state.selected_class
+                    st.session_state.from_station = from_station
+                    st.session_state.to_station = to_station
+                    st.session_state.journey_date = journey_date
                     st.session_state.page = "Booking"
                     st.rerun()
                 else:
@@ -763,7 +718,6 @@ elif st.session_state.page == "My Bookings":
                             st.write(f"**Status:** {row['Status']}")
             else:
                 st.info("No past journeys found")
-
 
 # Add logout button to sidebar if logged in
 if st.session_state.logged_in:
