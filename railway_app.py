@@ -24,6 +24,52 @@ def connect_to_db():
 def generate_pnr():
     return ''.join(random.choices(string.digits, k=6))
 
+# Function to get all train names and IDs (already exists, ensure it's accessible)
+def get_all_trains():
+    trains = {}
+    try:
+        conn = connect_to_db()
+        if conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT train_id, train_name FROM train ORDER BY train_name")
+            result = cursor.fetchall()
+            trains = {row[1]: row[0] for row in result} # Map name to ID
+            cursor.close()
+            conn.close()
+        else:
+            st.error("Could not connect to database to fetch trains.")
+    except Exception as e:
+        st.error(f"Error fetching trains: {e}")
+    return trains
+
+# Function to get all class names and IDs
+def get_classes():
+    classes = {}
+    try:
+        conn = connect_to_db()
+        if conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT class_id, class_name FROM class ORDER BY class_name")
+            result = cursor.fetchall()
+            # Map UI-friendly names if needed, or use DB names directly
+            class_name_mapping_ui = { # Optional: Map DB names to UI names if different
+                "First Class": "AC First Class (1A)",
+                "AC 2-tier": "AC 2-Tier (2A)",
+                "AC 3-tier": "AC 3-Tier (3A)",
+                "Sleeper": "Sleeper (SL)",
+                "Second Sitting": "Second Sitting (2S)",
+                "AC Chair Car": "AC Chair Car",
+                "Executive Class": "Executive Class"
+            }
+            classes = {class_name_mapping_ui.get(row[1], row[1]): row[0] for row in result} # Map UI name to ID
+            cursor.close()
+            conn.close()
+        else:
+            st.error("Could not connect to database to fetch classes.")
+    except Exception as e:
+        st.error(f"Error fetching classes: {e}")
+    return classes
+
 # Initialize session state
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
@@ -68,6 +114,31 @@ with st.sidebar:
         
     if st.button("PNR Status", key="nav_pnr", use_container_width=True):
         st.session_state.page = "PNR Status"
+        st.rerun()
+        
+    # Add Train Schedule button
+    if st.button("Train Schedule", key="nav_schedule", use_container_width=True):
+        st.session_state.page = "Train Schedule"
+        st.rerun()
+        
+    # Add Seat Availability button
+    if st.button("Seat Availability", key="nav_availability", use_container_width=True):
+        st.session_state.page = "Seat Availability"
+        st.rerun()
+        
+    # Add Passenger List button
+    if st.button("Passenger List", key="nav_passenger_list", use_container_width=True):
+        st.session_state.page = "Passenger List"
+        st.rerun()
+        
+    # Add Busiest Routes button
+    if st.button("Busiest Routes", key="nav_busiest_routes", use_container_width=True):
+        st.session_state.page = "Busiest Routes"
+        st.rerun()
+        
+    # Add Revenue Report button
+    if st.button("Revenue Report", key="nav_revenue_report", use_container_width=True):
+        st.session_state.page = "Revenue Report"
         st.rerun()
         
     if st.button("Cancellation", key="nav_cancel", use_container_width=True):
@@ -655,6 +726,431 @@ elif st.session_state.page == "PNR Status":
                 st.error(f"Error retrieving ticket information: {e}")
         else:
             st.error("Please enter a valid PNR number")
+
+# Train Schedule page (New Section)
+elif st.session_state.page == "Train Schedule":
+    st.header("Train Schedule Lookup")
+
+    # Function to get all train names and IDs
+    def get_all_trains():
+        trains = {}
+        try:
+            conn = connect_to_db()
+            if conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT train_id, train_name FROM train ORDER BY train_name")
+                result = cursor.fetchall()
+                trains = {row[1]: row[0] for row in result} # Map name to ID
+                cursor.close()
+                conn.close()
+            else:
+                st.error("Could not connect to database to fetch trains.")
+        except Exception as e:
+            st.error(f"Error fetching trains: {e}")
+        return trains
+
+    train_dict = get_all_trains()
+    train_names = list(train_dict.keys())
+
+    if not train_names:
+        st.warning("No trains found in the database.")
+    else:
+        selected_train_name = st.selectbox("Select Train", train_names)
+
+        if st.button("Get Schedule"):
+            if selected_train_name:
+                selected_train_id = train_dict.get(selected_train_name)
+                if selected_train_id:
+                    try:
+                        conn = connect_to_db()
+                        if conn:
+                            cursor = conn.cursor(dictionary=True)
+                            # Call the stored procedure GetTrainSchedule
+                            cursor.callproc('GetTrainSchedule', (selected_train_id,))
+                            
+                            schedule_results = []
+                            # Fetch results from the procedure call
+                            for result in cursor.stored_results():
+                                schedule_results.extend(result.fetchall())
+
+                            if schedule_results:
+                                st.subheader(f"Schedule for {selected_train_name} ({selected_train_id})")
+                                schedule_df = pd.DataFrame(schedule_results)
+                                # Format time columns if they exist
+                                if 'arrival_time' in schedule_df.columns:
+                                     schedule_df['arrival_time'] = schedule_df['arrival_time'].astype(str).replace('NaT', 'Starts')
+                                if 'departure_time' in schedule_df.columns:
+                                     schedule_df['departure_time'] = schedule_df['departure_time'].astype(str).replace('NaT', 'Ends')
+                                
+                                # Rename columns for better readability
+                                schedule_df.rename(columns={
+                                    'station_name': 'Station Name',
+                                    'arrival_time': 'Arrival',
+                                    'departure_time': 'Departure',
+                                    'distance_from_source': 'Distance (km)'
+                                }, inplace=True)
+                                
+                                st.dataframe(schedule_df[['Station Name', 'Arrival', 'Departure', 'Distance (km)']])
+                            else:
+                                st.warning(f"No schedule found for train: {selected_train_name}")
+                            
+                            cursor.close()
+                            conn.close()
+                        else:
+                            st.error("Database connection failed.")
+                    except Exception as e:
+                        st.error(f"Error retrieving train schedule: {e}")
+                else:
+                    st.error("Could not find ID for the selected train.")
+            else:
+                st.error("Please select a train.")
+
+# Seat Availability page (New Section)
+elif st.session_state.page == "Seat Availability":
+    st.header("Check Seat Availability")
+
+    train_dict = get_all_trains()
+    class_dict = get_classes()
+
+    train_names = list(train_dict.keys())
+    class_names = list(class_dict.keys())
+
+    if not train_names or not class_names:
+        st.warning("Could not fetch train or class data.")
+    else:
+        col1, col2 = st.columns(2)
+        with col1:
+            selected_train_name = st.selectbox("Select Train", train_names)
+        with col2:
+            selected_class_name = st.selectbox("Select Class", class_names)
+
+        journey_date = st.date_input("Journey Date", min_value=datetime.now().date())
+
+        if st.button("Check Availability"):
+            if selected_train_name and selected_class_name and journey_date:
+                selected_train_id = train_dict.get(selected_train_name)
+                selected_class_id = class_dict.get(selected_class_name)
+
+                if selected_train_id and selected_class_id:
+                    try:
+                        conn = connect_to_db()
+                        if conn:
+                            cursor = conn.cursor(dictionary=True)
+                            # Call the stored procedure CheckSeatAvailability
+                            cursor.callproc('CheckSeatAvailability', (selected_train_id, selected_class_id, journey_date))
+
+                            total_available = -1 # Default value if not found
+                            available_seat_numbers = []
+
+                            # Iterate through the results
+                            results_iterator = cursor.stored_results()
+                            
+                            # First result set: Total available seats count
+                            try:
+                                first_result_set = next(results_iterator)
+                                total_seats_result = first_result_set.fetchone()
+                                if total_seats_result:
+                                    total_available = total_seats_result.get('total_available_seats', 0)
+                            except StopIteration:
+                                st.warning("Could not retrieve total available seats count.")
+                            except Exception as e:
+                                st.error(f"Error processing first result set: {e}")
+
+                            # Second result set: List of available seat numbers
+                            try:
+                                second_result_set = next(results_iterator)
+                                available_seat_numbers = [row['seat_number'] for row in second_result_set.fetchall()]
+                            except StopIteration:
+                                # This might be expected if no specific seats are listed or only count is returned
+                                pass 
+                            except Exception as e:
+                                st.error(f"Error processing second result set: {e}")
+
+
+                            if total_available != -1:
+                                st.success(f"Availability for {selected_train_name} ({selected_class_name}) on {journey_date}:")
+                                st.metric(label="Total Available Seats", value=total_available)
+                                
+                                if available_seat_numbers:
+                                     st.write(f"Count of specific available seats listed: {len(available_seat_numbers)}")
+                                     # Optionally display a sample or all seats if the list isn't too long
+                                     # st.write("Available Seat Numbers:", ", ".join(available_seat_numbers))
+                                elif total_available > 0:
+                                     st.info("Specific seat numbers are not listed, but seats are available based on the total count.")
+                                else: # total_available is 0 or less
+                                     st.warning("No seats available.")
+
+                            else:
+                                st.warning(f"Could not determine availability for the selected criteria.")
+
+                            cursor.close()
+                            conn.close()
+                        else:
+                            st.error("Database connection failed.")
+                    except Exception as e:
+                        st.error(f"Error checking seat availability: {e}")
+                else:
+                    st.error("Could not find ID for the selected train or class.")
+            else:
+                st.error("Please select a train, class, and journey date.")
+
+# Passenger List page (New Section)
+elif st.session_state.page == "Passenger List":
+    st.header("Passenger List by Train and Date")
+
+    # Optional: Add admin check later
+    # if st.session_state.role != 'admin':
+    #     st.warning("This feature is available for administrators only.")
+    # else:
+
+    train_dict = get_all_trains()
+    train_names = list(train_dict.keys())
+
+    if not train_names:
+        st.warning("Could not fetch train data.")
+    else:
+        selected_train_name = st.selectbox("Select Train", train_names)
+        journey_date = st.date_input("Journey Date", min_value=datetime.now().date() - timedelta(days=365), max_value=datetime.now().date() + timedelta(days=365)) # Allow past/future dates
+
+        if st.button("Get Passenger List"):
+            if selected_train_name and journey_date:
+                selected_train_id = train_dict.get(selected_train_name)
+
+                if selected_train_id:
+                    try:
+                        conn = connect_to_db()
+                        if conn:
+                            cursor = conn.cursor(dictionary=True)
+                            # Call the stored procedure GetPassengersByTrain
+                            cursor.callproc('GetPassengersByTrain', (selected_train_id, journey_date))
+
+                            passenger_results = []
+                            # Fetch results from the procedure call
+                            for result in cursor.stored_results():
+                                passenger_results.extend(result.fetchall())
+
+                            if passenger_results:
+                                st.subheader(f"Confirmed Passengers for {selected_train_name} on {journey_date}")
+                                passenger_df = pd.DataFrame(passenger_results)
+                                
+                                # Rename columns for better readability
+                                passenger_df.rename(columns={
+                                    'name': 'Passenger Name',
+                                    'age': 'Age',
+                                    'gender': 'Gender',
+                                    'class_name': 'Class',
+                                    'seat_number': 'Seat',
+                                    'from_station': 'From',
+                                    'to_station': 'To'
+                                }, inplace=True)
+                                
+                                st.dataframe(passenger_df[['Passenger Name', 'Age', 'Gender', 'Class', 'Seat', 'From', 'To']])
+                            else:
+                                st.info(f"No confirmed passengers found for {selected_train_name} on {journey_date}.")
+                            
+                            cursor.close()
+                            conn.close()
+                        else:
+                            st.error("Database connection failed.")
+                    except Exception as e:
+                        st.error(f"Error retrieving passenger list: {e}")
+                else:
+                    st.error("Could not find ID for the selected train.")
+            else:
+                st.error("Please select a train and journey date.")
+
+# Busiest Routes page (Modified Section)
+elif st.session_state.page == "Busiest Routes":
+    st.header("Overall Busiest Routes") # Updated header
+
+    # Optional: Add admin check later
+    # if st.session_state.role != 'admin':
+    #     st.warning("This feature is available for administrators only.")
+    # else:
+
+    # Removed date inputs and button
+    # Logic now runs directly on page load
+
+    try:
+        conn = connect_to_db()
+        if conn:
+            cursor = conn.cursor(dictionary=True)
+            
+            # Query to get all confirmed tickets with source and destination station names
+            query = """
+            SELECT 
+                s1.station_name AS source_station, 
+                s2.station_name AS destination_station
+            FROM ticket t
+            JOIN station s1 ON t.from_station_id = s1.station_id
+            JOIN station s2 ON t.to_station_id = s2.station_id
+            WHERE t.status = 'Confirmed'; 
+            """
+            cursor.execute(query)
+            all_tickets = cursor.fetchall()
+
+            if all_tickets:
+                # Use pandas to calculate busiest routes
+                tickets_df = pd.DataFrame(all_tickets)
+                
+                # Group by source and destination and count occurrences
+                busiest_routes = tickets_df.groupby(['source_station', 'destination_station']).size().reset_index(name='passenger_count')
+                
+                # Sort by passenger count descending and get top 5
+                top_routes = busiest_routes.sort_values(by='passenger_count', ascending=False)
+
+                if not top_routes.empty:
+                    st.subheader("Top 5 Busiest Routes (Overall)")
+                    # Rename columns for display
+                    top_routes.rename(columns={
+                        'source_station': 'Source Station',
+                        'destination_station': 'Destination Station',
+                        'passenger_count': 'Total Passenger Count'
+                    }, inplace=True)
+                    st.dataframe(top_routes[['Source Station', 'Destination Station', 'Total Passenger Count']])
+                else:
+                     st.info("No confirmed booking data found to determine busiest routes.")
+
+            else:
+                st.info("No confirmed booking data found.")
+            
+            cursor.close()
+            conn.close()
+        else:
+            st.error("Database connection failed.")
+    except Exception as e:
+        st.error(f"Error retrieving or processing busiest routes: {e}")
+
+# Revenue Report page (Modified Section)
+elif st.session_state.page == "Revenue Report":
+    st.header("Revenue Report")
+
+    # Optional: Add admin check later
+    # if st.session_state.role != 'admin':
+    #     st.warning("This feature is available for administrators only.")
+    # else:
+
+    # Adjust default dates to match sample data (May 2023)
+    default_start_date = datetime(2023, 5, 1).date()
+    default_end_date = datetime(2023, 5, 31).date()
+
+    col1, col2 = st.columns(2)
+    with col1:
+        # Remove max_value constraint tied to today
+        start_date = st.date_input("Start Date", value=default_start_date) 
+    with col2:
+        # Remove min_value and max_value constraints tied to start_date/today
+        end_date = st.date_input("End Date", value=default_end_date) 
+
+    if st.button("Generate Report"):
+        if start_date > end_date:
+            st.error("Error: Start date cannot be after end date.")
+        else:
+            try:
+                conn = connect_to_db()
+                if conn:
+                    cursor = conn.cursor(dictionary=True)
+                    # Call the stored procedure GenerateRevenueReport
+                    cursor.callproc('GenerateRevenueReport', (start_date, end_date))
+
+                    results_iterator = cursor.stored_results()
+                    total_revenue = 0
+                    revenue_by_mode = pd.DataFrame()
+                    revenue_by_train = pd.DataFrame()
+                    found_data = False
+
+                    # Process first result set: Total Revenue
+                    try:
+                        first_result_set = next(results_iterator)
+                        total_revenue_result = first_result_set.fetchone()
+                        if total_revenue_result and total_revenue_result['total_revenue'] is not None:
+                            total_revenue = float(total_revenue_result['total_revenue'])
+                            found_data = True
+                    except StopIteration:
+                        pass # No result sets returned
+                    except Exception as e:
+                        st.error(f"Error processing total revenue: {e}")
+
+                    # Process second result set: Revenue by Payment Mode
+                    try:
+                        second_result_set = next(results_iterator)
+                        mode_results = second_result_set.fetchall()
+                        if mode_results:
+                            revenue_by_mode = pd.DataFrame(mode_results)
+                            # Convert decimal to float for display
+                            revenue_by_mode['mode_revenue'] = revenue_by_mode['mode_revenue'].astype(float)
+                            found_data = True # Mark data as found if this set has results
+                    except StopIteration:
+                        pass # Only one result set returned
+                    except Exception as e:
+                        st.error(f"Error processing revenue by mode: {e}")
+
+                    # Process third result set: Revenue by Train
+                    try:
+                        third_result_set = next(results_iterator)
+                        train_results = third_result_set.fetchall()
+                        if train_results:
+                            revenue_by_train = pd.DataFrame(train_results)
+                            # Convert decimal to float for display
+                            revenue_by_train['train_revenue'] = revenue_by_train['train_revenue'].astype(float)
+                            found_data = True # Mark data as found if this set has results
+                    except StopIteration:
+                        pass # Only two result sets returned
+                    except Exception as e:
+                        st.error(f"Error processing revenue by train: {e}")
+
+                    if found_data:
+                        st.subheader(f"Revenue Report ({start_date} to {end_date})")
+                        
+                        # Display Total Revenue only if it's greater than 0 or other data exists
+                        if total_revenue > 0:
+                             st.metric(label="Total Revenue", value=f"₹ {total_revenue:,.2f}")
+                             st.markdown("---")
+                        # Check if DataFrames are empty before displaying
+                        elif revenue_by_mode.empty and revenue_by_train.empty:
+                             st.info(f"No revenue data found for the period {start_date} to {end_date}.")
+                             # Exit early if no data at all
+                             cursor.close()
+                             conn.close()
+                             st.stop()
+
+
+                        # Display Revenue by Payment Mode
+                        if not revenue_by_mode.empty:
+                            st.subheader("Revenue by Payment Mode")
+                            revenue_by_mode.rename(columns={
+                                'payment_mode': 'Payment Mode',
+                                'mode_revenue': 'Revenue (₹)'
+                            }, inplace=True)
+                            st.dataframe(revenue_by_mode.sort_values(by='Revenue (₹)', ascending=False)) # Sort for consistency
+                            st.markdown("---")
+                        # Don't show 'No data' if total revenue was shown
+                        elif total_revenue == 0 and revenue_by_train.empty: 
+                            st.info("No revenue data found by payment mode for this period.")
+
+
+                        # Display Revenue by Train
+                        if not revenue_by_train.empty:
+                            st.subheader("Revenue by Train")
+                            revenue_by_train.rename(columns={
+                                'train_name': 'Train Name',
+                                'train_revenue': 'Revenue (₹)'
+                            }, inplace=True)
+                            st.dataframe(revenue_by_train.sort_values(by='Revenue (₹)', ascending=False))
+                        # Don't show 'No data' if total revenue or mode revenue was shown
+                        elif total_revenue == 0 and revenue_by_mode.empty:
+                            st.info("No revenue data found by train for this period.")
+
+                    # This else handles the case where found_data remains False after checking all result sets
+                    else:
+                        st.info(f"No revenue data found for the period {start_date} to {end_date}.")
+                    
+                    cursor.close()
+                    conn.close()
+                else:
+                    st.error("Database connection failed.")
+            except Exception as e:
+                st.error(f"Error generating revenue report: {e}")
 
 # Cancellation page
 elif st.session_state.page == "Cancellation":
