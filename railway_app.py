@@ -44,6 +44,8 @@ if 'journey_date' not in st.session_state:
     st.session_state.journey_date = datetime.now().date()
 if 'trains_df' not in st.session_state:
     st.session_state.trains_df = None
+if 'search_performed' not in st.session_state:
+    st.session_state.search_performed = False
 
 # App title
 st.title("Indian Railway Ticket Reservation System")
@@ -272,13 +274,136 @@ elif st.session_state.page == "Booking":
     if not st.session_state.logged_in:
         st.warning("Please login to book tickets")
     else:
+        # Fetch stations and create station_dict for this page scope
+        def get_stations(): # Define or ensure get_stations is accessible here
+            try:
+                conn = connect_to_db()
+                if conn:
+                    cursor = conn.cursor()
+                    cursor.execute('SELECT station_id, station_name, station_code, city, state FROM station ORDER BY station_name;')
+                    result = cursor.fetchall()
+                    stations_data = [(row[0], f"{row[1]} ({row[2]}) - {row[3]}, {row[4]}") for row in result]
+                    cursor.close()
+                    conn.close()
+                    return stations_data
+                else:
+                    st.error("Could not connect to database")
+                    return []
+            except Exception as e:
+                st.error(f"Error fetching stations: {e}")
+                return []
+        
+        stations = get_stations()
+        station_names = [station[1] for station in stations]
+        station_ids = [station[0] for station in stations]
+        station_dict = dict(zip(station_names, station_ids)) # Define station_dict here
+
+        calculated_base_fare = 0.0 # Initialize calculated base fare
+        train_id = None
+        class_id = None
+        from_station_id = None
+        to_station_id = None
+        error_in_fare_calc = False
+
         # Check if we have booking info from train search
         if hasattr(st.session_state, 'booking_train'):
             st.info(f"Booking for: {st.session_state.booking_train} ({st.session_state.booking_class})")
             st.info(f"From {st.session_state.from_station} to {st.session_state.to_station}")
             st.info(f"Journey Date: {st.session_state.journey_date}")
+
+            # --- Start: Fetch data for fare calculation ---
+            try:
+                conn = connect_to_db()
+                if conn:
+                    cursor = conn.cursor()
+
+                    # Map UI class name to DB class name
+                    class_name_mapping = {
+                        "AC First Class (1A)": "First Class",
+                        "AC 2-Tier (2A)": "AC 2-tier",
+                        "AC 3-Tier (3A)": "AC 3-tier",
+                        "Sleeper (SL)": "Sleeper",
+                        "Second Sitting (2S)": "Second Sitting",
+                        "AC Chair Car": "AC Chair Car",
+                        "Executive Class": "Executive Class"
+                    }
+                    db_class_name = class_name_mapping.get(st.session_state.booking_class)
+
+                    if not db_class_name:
+                        st.error(f"Invalid class selected: {st.session_state.booking_class}")
+                        error_in_fare_calc = True
+                    else:
+                        # 1. Get train_id and class_id
+                        query_ids = """
+                        SELECT t.train_id, c.class_id 
+                        FROM train t, class c 
+                        WHERE t.train_name = %s AND c.class_name = %s
+                        LIMIT 1;
+                        """
+                        cursor.execute(query_ids, (st.session_state.booking_train, db_class_name))
+                        id_result = cursor.fetchone()
+
+                        if not id_result:
+                            st.error(f"Could not find Train/Class ID for fare calculation.")
+                            error_in_fare_calc = True
+                        else:
+                            train_id, class_id = id_result
+
+                            # 2. Get station IDs
+                            from_station_id = station_dict.get(st.session_state.from_station)
+                            to_station_id = station_dict.get(st.session_state.to_station)
+
+                            if not from_station_id or not to_station_id:
+                                st.error("Could not resolve station IDs for fare calculation.")
+                                error_in_fare_calc = True
+                            else:
+                                # 3. Get base_fare_per_km
+                                query_base_fare = "SELECT base_fare_per_km FROM class WHERE class_id = %s"
+                                cursor.execute(query_base_fare, (class_id,))
+                                fare_result = cursor.fetchone()
+                                if not fare_result:
+                                    st.error("Could not find base fare for the selected class.")
+                                    error_in_fare_calc = True
+                                else:
+                                    base_fare_per_km = float(fare_result[0]) # Ensure it's float
+
+                                    # 4. Get distances
+                                    query_distance = """
+                                    SELECT station_id, distance_from_source 
+                                    FROM route 
+                                    WHERE train_id = %s AND station_id IN (%s, %s)
+                                    """
+                                    cursor.execute(query_distance, (train_id, from_station_id, to_station_id))
+                                    distance_results = cursor.fetchall()
+
+                                    if len(distance_results) != 2:
+                                        st.error("Could not find route distance information for one or both stations.")
+                                        error_in_fare_calc = True
+                                    else:
+                                        dist_map = {row[0]: float(row[1]) for row in distance_results} # Ensure float
+                                        distance_from = dist_map.get(from_station_id)
+                                        distance_to = dist_map.get(to_station_id)
+                                        
+                                        if distance_from is None or distance_to is None:
+                                             st.error("Error retrieving distances from route.")
+                                             error_in_fare_calc = True
+                                        else:
+                                            travel_distance = abs(distance_to - distance_from)
+                                            calculated_base_fare = travel_distance * base_fare_per_km
+                    
+                    cursor.close()
+                    conn.close()
+                else:
+                    st.error("Database connection failed during fare calculation.")
+                    error_in_fare_calc = True
+            except Exception as e:
+                st.error(f"Error calculating fare: {e}")
+                error_in_fare_calc = True
+            # --- End: Fetch data for fare calculation ---
+
         else:
             st.warning("Please search and select a train first")
+            st.stop() # Stop execution if no booking info is present
             
         # Passenger details
         st.subheader("Passenger Details")
@@ -297,6 +422,7 @@ elif st.session_state.page == "Booking":
         # Concession options
         has_concession = st.checkbox("Apply for Concession")
         
+        concession_type = None # Initialize concession_type
         if has_concession:
             concession_type = st.selectbox("Concession Type", 
                                          ["Senior Citizen (Male)","Senior Citizen (Female)", "Student", "Disabled", "Armed Forces", "War Widow", "Paramilitary Forces", "Press Correspondents"])
@@ -312,57 +438,129 @@ elif st.session_state.page == "Booking":
         # Payment options
         st.subheader("Payment Details")
         
-        # Dynamically compute fare details based on concession (if applied)
-        base_fare = 1240.00
-        reservation_charge = 40.00
-        superfast_charge = 45.00
-        GST_rate = 5.00
-        
-        discount_mapping = {
-            "senior citizen (male)": 40.0,
-            "senior citizen (female)": 50.0,
-            "student": 25.0,
-            "disabled": 50.0,
-            "armed forces": 30.0,
-            "war widow": 75.0,
-            "paramilitary forces": 30.0,
-            "press correspondents": 50.0
-        }
-        
-        discount_rate = 0.0
-        # If concession is requested, obtain discount percentage (case-insensitive)
-        if 'has_concession' in locals() and has_concession:
-            discount_rate = discount_mapping.get(concession_type.lower(), 0.0)
-        
-        discount_amount = base_fare * (discount_rate / 100)
-        effective_base_fare = base_fare - discount_amount
-        fare_without_tax = effective_base_fare + reservation_charge + superfast_charge
-        GST_amount = fare_without_tax * (GST_rate / 100)
-        total_fare = fare_without_tax + GST_amount
-        
-        fare_details = {
-            "Base Fare": f"₹ {effective_base_fare:.2f}",
-            "Reservation Charges": f"₹ {reservation_charge:.2f}",
-            "Superfast Charges": f"₹ {superfast_charge:.2f}",
-            "GST (5%)": f"₹ {GST_amount:.2f}",
-            "Total Fare": f"₹ {total_fare:.2f}"
-        }
-        
-        for item, amount in fare_details.items():
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                st.write(item)
-            with col2:
-                st.write(amount)
-        
-        payment_method = st.selectbox("Payment Method", 
-                                    ["Credit/Debit Card", "Net Banking", "UPI", "Wallet"])
-        
-        if st.button("Proceed to Payment"):
-            st.success("Booking Successful!")
-            pnr = generate_pnr()
-            st.info(f"Your PNR number is: PNR{pnr}")
-            st.info("Ticket details have been sent to your email.")
+        if error_in_fare_calc:
+             st.error("Cannot display fare details due to calculation error.")
+        else:
+            # Dynamically compute fare details based on calculated base fare and concession
+            reservation_charge = 40.00 # Keep hardcoded or fetch if available
+            superfast_charge = 45.00 # Keep hardcoded or fetch if available
+            GST_rate = 5.00 # Keep hardcoded or fetch if available
+            
+            discount_mapping = {
+                "senior citizen (male)": 40.0,
+                "senior citizen (female)": 50.0,
+                "student": 25.0,
+                "disabled": 50.0,
+                "armed forces": 30.0,
+                "war widow": 75.0,
+                "paramilitary forces": 30.0,
+                "press correspondents": 50.0
+            }
+            
+            discount_rate = 0.0
+            # If concession is requested, obtain discount percentage (case-insensitive)
+            if has_concession and concession_type: # Check if concession_type is not None
+                discount_rate = discount_mapping.get(concession_type.lower(), 0.0)
+            
+            # Use calculated_base_fare here
+            discount_amount = calculated_base_fare * (discount_rate / 100)
+            effective_base_fare = calculated_base_fare - discount_amount
+            fare_without_tax = effective_base_fare + reservation_charge + superfast_charge
+            GST_amount = fare_without_tax * (GST_rate / 100)
+            total_fare = fare_without_tax + GST_amount # This is the final fare to be paid and stored
+            
+            fare_details = {
+                "Calculated Base Fare": f"₹ {calculated_base_fare:.2f}", # Show calculated base
+                "Reservation Charges": f"₹ {reservation_charge:.2f}",
+                "Superfast Charges": f"₹ {superfast_charge:.2f}",
+            }
+            if discount_amount > 0:
+                 fare_details["Concession Discount"] = f"- ₹ {discount_amount:.2f}"
+            
+            fare_details.update({
+                 "Fare after Concession": f"₹ {effective_base_fare:.2f}",
+                 "GST (5%)": f"₹ {GST_amount:.2f}",
+                 "Total Fare": f"₹ {total_fare:.2f}"
+            })
+            
+            for item, amount in fare_details.items():
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.write(item)
+                with col2:
+                    st.write(amount)
+            
+            payment_method = st.selectbox("Payment Method", 
+                                        ["Credit/Debit Card", "Net Banking", "UPI", "Wallet"])
+            
+            if st.button("Proceed to Payment"):
+                # Basic validation
+                if not passenger_name or not passenger_mobile:
+                     st.warning("Please fill in passenger name and mobile number.")
+                # Check if IDs were fetched correctly earlier
+                elif train_id is None or class_id is None or from_station_id is None or to_station_id is None:
+                     st.error("Cannot proceed with booking due to missing train/class/station information.")
+                else:
+                    pnr = generate_pnr() # Generate PNR first
+                    
+                    insert_ticket_query = """
+                    INSERT INTO ticket (pnr_number, train_id, class_id, passenger_id, from_station_id, to_station_id, journey_date, fare, concession_applied, status, seat_number)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) 
+                    """ 
+                    insert_passenger_query = """
+                    INSERT INTO passenger (name, age, gender, mobile, email) 
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON DUPLICATE KEY UPDATE passenger_id=LAST_INSERT_ID(passenger_id); 
+                    """ 
+
+                    try:
+                        conn = connect_to_db()
+                        if conn:
+                            cursor = conn.cursor()
+                            
+                            # 1. Insert or get passenger_id (Moved from previous position)
+                            cursor.execute(insert_passenger_query, (
+                                passenger_name, passenger_age, passenger_gender, passenger_mobile, passenger_email
+                            ))
+                            passenger_id = cursor.lastrowid # Get the ID of the inserted or existing passenger
+                            
+                            # IDs (train_id, class_id, from_station_id, to_station_id) are already fetched above
+                            
+                            journey_date = st.session_state.journey_date
+                            fare = total_fare # Use the final calculated total_fare
+                            concession_amount_val = discount_amount # Use calculated discount amount
+                            status = "Confirmed" # Assuming confirmed for now
+                            seat_number = None # Placeholder
+
+                            # 2. Insert ticket details into the database
+                            cursor.execute(insert_ticket_query, (
+                                "PNR"+pnr, train_id, class_id, passenger_id, 
+                                from_station_id, to_station_id, journey_date, 
+                                fare, concession_amount_val, status, seat_number
+                            ))
+                            conn.commit()
+                            
+                            cursor.close()
+                            conn.close()
+                            
+                            st.success("Booking Successful!") 
+                            st.info(f"Your PNR number is: PNR{pnr}")
+                            st.info("Ticket details have been sent to your email (simulation).")
+                            # Clear booking state after success
+                            del st.session_state.booking_train
+                            del st.session_state.booking_class
+                            # st.session_state.page = "My Bookings" 
+                            # st.rerun()
+
+                        else:
+                            st.error("Database connection failed. Please try again later.")
+                    except Exception as e:
+                        st.error(f"Error booking ticket: {e}")
+                        # ... (error handling with rollback) ...
+                        if conn and conn.is_connected():
+                            conn.rollback()
+                            cursor.close()
+                            conn.close()
 
 # PNR Status page
 elif st.session_state.page == "PNR Status":
@@ -467,7 +665,8 @@ elif st.session_state.page == "Cancellation":
     else:
         pnr_number = st.text_input("Enter PNR Number to Cancel")
         
-        if st.button("Search Ticket"):
+        if st.button("Search Ticket") or st.session_state.search_performed:
+            st.session_state.search_performed = not st.session_state.search_performed
             if pnr_number:
                 # Query the database for the PNR
                 try:
@@ -588,50 +787,52 @@ elif st.session_state.page == "Cancellation":
                                         # Store the reason for future reference
                                         st.session_state.cancellation_reason = reason
                                         
-                                        # Insert into cancellation table with refund status as Pending
+                                        # Insert into cancellation table - This will trigger the 'after_cancellation' trigger
                                         insert_query = """
                                         INSERT INTO cancellation 
                                         (ticket_id, cancellation_date, refund_amount, refund_status) 
                                         VALUES (%s, %s, %s, %s)
                                         """
                                         
-                                        current_date = datetime.now()
+                                        current_datetime = datetime.now() # Use datetime for cancellation_date
                                         
                                         cursor.execute(insert_query, (
                                             st.session_state.ticket_id,
-                                            current_date,
+                                            current_datetime, # Use current datetime
                                             st.session_state.refund_amount,
-                                            "Pending"
+                                            "Pending" # Set initial refund status
                                         ))
                                         
                                         # Get the newly inserted cancellation_id
                                         cursor.execute("SELECT LAST_INSERT_ID()")
                                         cancellation_id = cursor.fetchone()[0]
                                         
-                                        # Commit the transaction
-                                        conn.commit()
-                                        
-                                        # Update ticket status to Cancelled in ticket table
-                                        update_query = """
-                                        UPDATE ticket SET status = 'Cancelled' WHERE ticket_id = %s
-                                        """
-                                        cursor.execute(update_query, (st.session_state.ticket_id,))
+                                        # Commit the transaction (which includes the trigger action)
                                         conn.commit()
                                         
                                         cursor.close()
                                         conn.close()
                                         
-                                        st.success("Ticket cancelled successfully!")
+                                        st.success("Ticket cancellation initiated successfully!") # Updated message
                                         st.info(f"Cancellation ID: {cancellation_id}")
-                                        st.info(f"Cancellation Date: {current_date.strftime('%d-%b-%Y %H:%M:%S')}")
+                                        st.info(f"Cancellation Date: {current_datetime.strftime('%d-%b-%Y %H:%M:%S')}")
                                         st.info(f"Refund Amount: ₹{st.session_state.refund_amount}")
                                         st.info(f"Refund Status: Pending")
-                                        st.info("Refund has been initiated and will be credited within 5-7 working days.")
+                                        st.info("Refund will be processed based on cancellation rules.")
+                                        # Clear state if needed
+                                        # del st.session_state.ticket_id
+                                        # del st.session_state.ticket_fare
+                                        # del st.session_state.refund_amount
                                         
                                     else:
                                         st.error("Database connection failed. Please try again later.")
                                 except Exception as e:
                                     st.error(f"Error cancelling ticket: {e}")
+                                    # Rollback if connection exists and an error occurred during insert
+                                    if conn and conn.is_connected():
+                                        conn.rollback()
+                                        cursor.close()
+                                        conn.close()
                         else:
                             st.error(f"No valid ticket found with PNR number: {pnr_number}")
                             st.info("The ticket may not exist, already be cancelled, or the journey date has passed.")
