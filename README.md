@@ -1,4 +1,7 @@
 ```bash
+mysql -u railway -p railway < dump.sql 
+mysql -u railway -p railway < new.sql # if you are having trouble doing it with dump.sql
+
 python -m venv railway_venv                        
 source railway_venv/bin/activate                   
 pip install -r requirements.txt
