@@ -25,7 +25,7 @@ erDiagram
         int available_seats
     }
 
-    CLASS {
+    SEAT_CLASS {
         int class_id PK
         string class_name
         float base_fare_per_km
@@ -130,7 +130,7 @@ erDiagram
     }
 
     TRAIN ||--o{ TRAIN_CLASS : offers
-    CLASS ||--o{ TRAIN_CLASS : includes
+    SEAT_CLASS ||--o{ TRAIN_CLASS : includes
     TRAIN ||--o{ SCHEDULE : scheduled_as
     TRAIN ||--o{ ROUTE : has_route
     STATION ||--o{ ROUTE : part_of
@@ -143,10 +143,10 @@ erDiagram
     BOOKING ||--o{ PAYMENT : results_in
     TICKET ||--o{ CANCELLATION : may_result_in
     TRAIN ||--o{ SEAT : provides
-    CLASS ||--o{ SEAT : consists_of
+    SEAT_CLASS ||--o{ SEAT : consists_of
     PASSENGER ||--o{ TICKET : books
     TRAIN ||--o{ TICKET : contains
-    CLASS ||--o{ TICKET : classifies
+    SEAT_CLASS ||--o{ TICKET : classifies
     STATION ||--o{ TICKET : start_from
     STATION ||--o{ TICKET : ends_at
 
